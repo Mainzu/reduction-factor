@@ -1,58 +1,5 @@
 #![no_std]
-//! A lightweight newtype for representing and composing reduction factors.
-//!
-//! This crate provides a [`Reduction<T>`] type that semantically represents a
-//! reduction factor of `(1 - x)`. It is useful for correctly combining sequential
-//! reductions, such as discounts, damage resistance, or probabilities, where
-//! simple addition is incorrect.
-//!
-//! ## The Problem
-//!
-//! Imagine you have a price of $100 and two discounts: one for 20% and another
-//! for 10%. A naive addition of the discounts (20% + 10% = 30%) would give an
-//! incorrect final price of $70.
-//!
-//! The correct way to apply sequential discounts is multiplicatively:
-//! 1.  First discount (20%): `$100 * (1 - 0.20) = $80`
-//! 2.  Second discount (10%): `$80 * (1 - 0.10) = $72`
-//!
-//! The total effective reduction is 28%, not 30%. This crate makes these
-//! compositions ergonomic and mathematically sound.
-//!
-//! # Example
-//!
-//! ```rust
-//! use reduction_factor::Reduction;
-//!
-//! // A 25% price reduction.
-//! let discount = Reduction(0.25f32);
-//! let price = 100.0;
-//!
-//! // Apply the reduction using the `*` operator.
-//! let final_price = discount * price;
-//! assert_eq!(final_price, 75.0);
-//!
-//! // A second, separate 10% discount.
-//! let extra_discount = Reduction(0.10f32);
-//!
-//! // Compose the two discounts using the `*` operator.
-//! // This is equivalent to `discount.compose(extra_discount)`.
-//! let combined_discount = discount * extra_discount;
-//!
-//! // The underlying reduction value is calculated as:
-//! // x + y - xy  =>  0.25 + 0.10 - (0.25 * 0.10) = 0.325
-//! assert_eq!(combined_discount.inner(), 0.325);
-//!
-//! // Applying the combined discount gives the same result as applying them sequentially.
-//! // $100 * (1 - 0.325) = $67.5
-//! assert_eq!(combined_discount * price, 67.5);
-//!
-//! // The identity reduction (0% off)
-//! let no_reduction = Reduction::none();
-//! assert_eq!(no_reduction * price, 100.0);
-//! ```
-//!
-//! This crate is `#![no_std]`.
+#![doc = include_str!("../README.md")]
 
 use core::fmt;
 use core::num::NonZeroUsize;
@@ -62,34 +9,11 @@ use num_traits::{One, Zero};
 
 /// A newtype representing a reduction factor of `(1 - T)`.
 ///
-/// This type is used to correctly model and compose sequential reductions. For example,
-/// applying a 20% reduction (`Reduction(0.2)`) and then a 10% reduction (`Reduction(0.1)`)
-/// is not a 30% reduction, but a 28% reduction. This struct's operations correctly
-/// handle this composition.
+/// See the [module-level documentation](self) for more information.
 ///
-/// # Use Cases
-/// - **Discounts**: Combining multiple discounts on a price.
-/// - **Game Mechanics**: Stacking damage resistance from armor, buffs, etc.
-/// - **Probabilities**: Calculating the combined probability of avoiding multiple independent failures.
-///
-/// # Composition
-///
-/// Two reductions `r1 = Reduction(x)` and `r2 = Reduction(y)` are composed by
-/// multiplying their effective multipliers: `(1 - x) * (1 - y)`.
-/// This expands to `1 - x - y + xy`, which is equivalent to a single reduction of
-/// `x + y - xy`. The `Mul` implementation for `Reduction<T>` performs this calculation.
-///
-/// ```
-/// use reduction_factor::Reduction;
-/// let r1 = Reduction(0.2);
-/// let r2 = Reduction(0.1);
-/// let combined = r1 * r2;
-/// assert_eq!(*combined, 0.28);
-/// ```
-///
-/// **A Note on `num_traits::One`**: This crate deliberately does not implement the `One` trait for `Reduction<T>`.
-/// The trait requires `one()` to return the multiplicative identity, which for `Reduction` is `Reduction::none()`.
-/// Having `Reduction::one()` return a `Reduction` containing zero would be highly confusing.
+/// Note that this type does not implement the [`num_traits::One`](https://docs.rs/num-traits/latest/num_traits/identities/trait.One.html) trait.
+/// This is intentional as the trait requires `one()` to return the multiplicative identity, which for `Reduction` is [`Reduction::none()`].
+/// However, having `Reduction::one()` return a `Reduction(T::zero())` would be highly confusing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(transparent)]
 pub struct Reduction<T>(pub T);
@@ -163,7 +87,7 @@ impl<T: One + Sub<Output = T>> Reduction<T> {
     ///
     /// This is equivalent to `value * self.multiplier()`.
     ///
-    /// This operation is also available via the `*` operator: `reduction * value`.
+    /// This operation is also available through multiplication: `reduction * value`.
     ///
     /// # Example
     /// ```
@@ -198,9 +122,11 @@ impl<T: Add<Output = T> + Sub<Output = T> + Mul<Output = T> + Clone> Reduction<T
     /// Composes this reduction with another, returning a new `Reduction`.
     ///
     /// This is equivalent to applying one reduction and then the other.
-    /// The formula for the new inner value is `self.0 + other.0 - self.0 * other.0`.
     ///
-    /// This operation is also available via the `*` operator: `r1 * r2`.   
+    /// The formula for the new inner value is `x + y - xy` where
+    /// `x` and `y` are the inner values of the two reductions.
+    ///
+    /// This operation is also available through multiplication: `r1 * r2`.
     ///
     /// # Example
     /// ```
@@ -218,7 +144,7 @@ impl<T: Add<Output = T> + Sub<Output = T> + Mul<Output = T> + Clone> Reduction<T
         Self(self.0.clone() + other.0.clone() - self.0 * other.0)
     }
 
-    /// In-place version of [`stack`](#method.stack).
+    /// In-place version of [`compose`](Self::compose).
     #[doc(alias = "stack_inplace")]
     #[doc(alias = "combine_inplace")]
     pub fn compose_inplace(&mut self, other: Self)
@@ -232,7 +158,7 @@ impl<T: Add<Output = T> + Sub<Output = T> + Mul<Output = T> + Clone> Reduction<T
 
     /// Composes the reduction with itself `exponent` times.
     ///
-    /// `pow(0)` returns `Reduction(0)` the identity reduction, `Reduction::none()`.
+    /// `pow(0)` returns `Reduction(0)` the identity reduction, [`Reduction::none()`].
     ///
     /// # Example
     /// ```
@@ -270,7 +196,7 @@ impl<T: Add<Output = T> + Sub<Output = T> + Mul<Output = T> + Clone> Reduction<T
 
     /// Composes the reduction with itself `exponent` times for a non-zero exponent.
     ///
-    /// The main difference from [`pow`](Self::pow) is that `T: Zero` isn't required.
+    /// The main difference from [`Reduction::pow()`] is that `T: Zero` isn't required.
     ///
     /// # Example
     /// ```
@@ -344,7 +270,7 @@ impl<T: Zero> Default for Reduction<T> {
 impl<T: Add<Output = T> + Sub<Output = T> + Mul<Output = T> + Clone> Mul for Reduction<T> {
     type Output = Self;
 
-    /// The `*` operator is overloaded for two `Reduction`s to perform [`stack`ing](Self::stack).
+    /// The multiplication operator is overloaded for two `Reduction`s to perform [`compose`](Self::compose).
     ///
     /// This is the idiomatic way to compose two reductions.
     #[inline]
@@ -355,7 +281,7 @@ impl<T: Add<Output = T> + Sub<Output = T> + Mul<Output = T> + Clone> Mul for Red
 impl<T: Default + Add<Output = T> + Sub<Output = T> + Mul<Output = T> + Clone> MulAssign
     for Reduction<T>
 {
-    /// The `*=` operator is overloaded for two `Reduction`s to perform [`stack_inplace`](Self::stack_inplace).
+    /// The `*=` operator is overloaded for two `Reduction`s to perform [`compose_inplace`](Self::compose_inplace).
     #[inline]
     fn mul_assign(&mut self, rhs: Self) {
         self.compose_inplace(rhs)
@@ -364,9 +290,7 @@ impl<T: Default + Add<Output = T> + Sub<Output = T> + Mul<Output = T> + Clone> M
 impl<T: One + Sub<Output = T>> Mul<T> for Reduction<T> {
     type Output = T;
 
-    /// The `*` operator is overloaded to [`reduce`](Self::reduce) the reduction to a value of type `T`.
-    ///
-    /// This is the idiomatic way to get the final value after a reduction.
+    /// The multiplication operator is overloaded to [`reduce`](Self::reduce) the reduction to a value of type `T`.
     #[inline]
     fn mul(self, rhs: T) -> Self::Output {
         self.reduce(rhs)

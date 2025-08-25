@@ -25,9 +25,7 @@ The main benefit of this wrapper type is ensuring that multiple reductions are *
 - **Zero-cost**: As a simple newtype wrapper, `Reduction<T>` has the same memory layout and performance as the underlying type `T`.
 - **`no_std` compatible**: Usable in embedded, WASM, and other resource-constrained environments.
 
-## Usage
-
-### Basic Creation and Application
+## Examples
 
 Create a `Reduction` and apply it to a value using the `*` operator or the `reduce` method.
 
