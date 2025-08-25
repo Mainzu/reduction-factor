@@ -1,0 +1,13 @@
+[package]
+name = "reduction-factor"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Provides a type representing reduction factor."
+readme = "README.md"
+repository = "https://github.com/Mainzu/reduction-factor"
+categories = ["mathematics", "no-std"]
+keywords = ["reduce", "discount", "chance"]
+
+[dependencies]
+num-traits = { version = "0.2", default-features = false }
